@@ -1,0 +1,9 @@
+idc-index
+pandas
+pyarrow
+numpy
+scipy
+pydicom
+scikit-learn
+matplotlib
+torch

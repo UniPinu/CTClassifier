@@ -1,0 +1,193 @@
+[
+ {
+  "run": "20261102_124146",
+  "finished": "2026-11-02 12:43",
+  "split": "val",
+  "scans_done": 200,
+  "minutes": 1.4,
+  "n_train": 345,
+  "n_train_cancer": 77,
+  "n_eval": 64,
+  "patches": {
+   "benign": 160,
+   "cancer": 113,
+   "random": 198
+  },
+  "best_val_auc": 0.703125,
+  "auc_all": 0.703125,
+  "auc_benign": 0.7499999999999999,
+  "auc_random": 0.6778846153846154,
+  "centre": 0.0392724834382534,
+  "n_cam": 24
+ },
+ {
+  "run": "20261102_135259",
+  "finished": "2026-11-02 13:54",
+  "split": "val",
+  "scans_done": 348,
+  "minutes": 1.6,
+  "n_train": 529,
+  "n_train_cancer": 172,
+  "n_eval": 113,
+  "patches": {
+   "benign": 160,
+   "cancer": 271,
+   "random": 341
+  },
+  "best_val_auc": 0.7922446406052963,
+  "auc_all": 0.7922446406052963,
+  "auc_benign": 0.8241758241758241,
+  "auc_random": 0.782733224222586,
+  "centre": 0.06047815456986427,
+  "n_cam": 52
+ },
+ {
+  "run": "20261102_144722",
+  "finished": "2026-11-02 14:51",
+  "split": "val",
+  "scans_done": 850,
+  "minutes": 3.4,
+  "n_train": 1272,
+  "n_train_cancer": 552,
+  "n_eval": 270,
+  "patches": {
+   "benign": 160,
+   "cancer": 807,
+   "random": 839
+  },
+  "best_val_auc": 0.8156043956043956,
+  "auc_all": 0.8156043956043956,
+  "auc_benign": 0.7918367346938776,
+  "auc_random": 0.8184729064039409,
+  "centre": 0.2768581509590149,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_151423",
+  "finished": "2026-11-02 15:20",
+  "split": "val",
+  "scans_done": 1355,
+  "minutes": 5.7,
+  "n_train": 2039,
+  "n_train_cancer": 704,
+  "n_eval": 512,
+  "patches": {
+   "benign": 568,
+   "cancer": 1025,
+   "random": 1332
+  },
+  "best_val_auc": 0.8916834002677376,
+  "auc_all": 0.8916834002677376,
+  "auc_benign": 0.8597718253968254,
+  "auc_random": 0.9079292929292929,
+  "centre": null,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_153035",
+  "finished": "2026-11-02 15:37",
+  "split": "val",
+  "scans_done": 1629,
+  "minutes": 6.3,
+  "n_train": 2497,
+  "n_train_cancer": 704,
+  "n_eval": 617,
+  "patches": {
+   "benign": 963,
+   "cancer": 1025,
+   "random": 1608
+  },
+  "best_val_auc": 0.8622934146961607,
+  "auc_all": 0.8622934146961607,
+  "auc_benign": 0.843898522800257,
+  "auc_random": 0.8743476430976431,
+  "centre": 0.2959569990634918,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_155942",
+  "finished": "2026-11-02 16:09",
+  "split": "val",
+  "scans_done": 2130,
+  "minutes": 9.2,
+  "n_train": 3237,
+  "n_train_cancer": 704,
+  "n_eval": 816,
+  "patches": {
+   "benign": 1574,
+   "cancer": 1025,
+   "random": 2090
+  },
+  "best_val_auc": 0.8940513626834382,
+  "auc_all": 0.8940513626834382,
+  "auc_benign": 0.8732142857142857,
+  "auc_random": 0.910440074906367,
+  "centre": 0.34920960664749146,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_163240",
+  "finished": "2026-11-02 16:53",
+  "split": "val",
+  "scans_done": 2641,
+  "minutes": 21.1,
+  "n_train": 4157,
+  "n_train_cancer": 704,
+  "n_eval": 962,
+  "patches": {
+   "benign": 2315,
+   "cancer": 1025,
+   "random": 2595
+  },
+  "best_val_auc": 0.949055129298096,
+  "auc_all": 0.949055129298096,
+  "auc_benign": 0.9216286149162862,
+  "auc_random": 0.9730615507593924,
+  "centre": 0.6414746046066284,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_171007",
+  "finished": "2026-11-02 17:48",
+  "split": "val",
+  "scans_done": 3141,
+  "epochs": 120,
+  "minutes": 38.2,
+  "n_train": 5040,
+  "n_train_cancer": 704,
+  "n_eval": 1139,
+  "patches": {
+   "benign": 3075,
+   "cancer": 1025,
+   "random": 3092
+  },
+  "best_val_auc": 0.9582551268682656,
+  "auc_all": 0.9582551268682656,
+  "auc_benign": 0.9385438972162741,
+  "auc_random": 0.9769647696476965,
+  "centre": 0.7556953430175781,
+  "n_cam": 64
+ },
+ {
+  "run": "20261102_183302",
+  "finished": "2026-11-02 19:14",
+  "split": "val",
+  "scans_done": 4605,
+  "epochs": 120,
+  "minutes": 41.3,
+  "n_train": 7562,
+  "n_train_cancer": 704,
+  "n_eval": 1623,
+  "patches": {
+   "benign": 5196,
+   "cancer": 1025,
+   "random": 4528
+  },
+  "best_val_auc": 0.9618772618772619,
+  "auc_all": 0.9618772618772617,
+  "auc_benign": 0.9451488743645606,
+  "auc_random": 0.9807522123893806,
+  "centre": 0.771929144859314,
+  "n_cam": 64
+ }
+]

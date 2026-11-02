@@ -1,0 +1,8 @@
+# Data made by step 2 (tens of GB) and its temporary downloads
+patches/
+tmp_dicom/
+
+# Python
+.venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>P5 pipeline dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-0: #f3f2ef; --surface-1: #fcfcfb; --border: #e2e1dc; --grid: #ebeae6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7c7b76;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+  --prev: #a9a8a2; --good: #008300; --warn: #b07800; --bad: #c62f2e; --track: #e8e7e3;
+}
+@media (prefers-color-scheme: dark) {
+  .viz-root {
+    color-scheme: dark;
+    --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2b; --grid: #2a2a27;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --prev: #65645f; --good: #3fa83f; --warn: #d9a21a; --bad: #e66767; --track: #2c2c29;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-root { background: var(--surface-0); color: var(--text-primary); min-height: 100vh; padding: 20px 24px 40px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 14px; margin: 0 0 10px; color: var(--text-secondary); font-weight: 600; }
+.top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.top .spacer { flex: 1; }
+.muted { color: var(--text-muted); }
+.pill { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 99px;
+        border: 1px solid var(--border); background: var(--surface-1); font-weight: 600; font-size: 13px; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.pill.running .dot { background: var(--good); animation: pulse 1.4s infinite; }
+.pill.finished .dot { background: var(--series-1); }
+@keyframes pulse { 50% { opacity: .3; } }
+button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+         background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--text-muted); }
+button:disabled { opacity: .45; cursor: default; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s5 { grid-column: span 5; }
+.s6 { grid-column: span 6; } .s7 { grid-column: span 7; } .s8 { grid-column: span 8; } .s12 { grid-column: span 12; }
+@media (max-width: 1100px) { .s3, .s4 { grid-column: span 6; } .s5, .s6, .s7, .s8 { grid-column: span 12; } }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.tile .sub { color: var(--text-muted); font-size: 12.5px; }
+.bar { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.bar > div { height: 100%; background: var(--series-1); border-radius: 4px; transition: width .6s; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12.5px; }
+td.wrap { white-space: normal; text-align: left; }
+.log { font: 12px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-0); border-radius: 6px;
+       padding: 8px 10px; height: 230px; overflow: auto; white-space: pre-wrap; color: var(--text-secondary); }
+.chart { position: relative; }
+.chart { display: flex; justify-content: center; }
+.chart svg { display: block; max-width: 100%; overflow: visible; }
+.chart .axis text { fill: var(--text-muted); font-size: 11px; }
+.chart .gridline { stroke: var(--grid); }
+.chart .ref { stroke: var(--text-muted); stroke-dasharray: 4 4; }
+.chart .reflabel { fill: var(--text-muted); font-size: 11px; }
+.chart .dlabel { font-size: 11.5px; fill: var(--text-secondary); }
+.chart .xhair { stroke: var(--text-muted); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+       border-radius: 6px; padding: 7px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+       white-space: nowrap; display: none; z-index: 2; }
+.tip b { font-variant-numeric: tabular-nums; }
+.tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
+img.cam { width: 100%; border-radius: 6px; background: #fff; }
+.note { font-size: 12.5px; color: var(--text-muted); margin-top: 8px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+.minihead { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.live-head { display: flex; gap: 28px; flex-wrap: wrap; margin: 2px 0 10px; }
+.live-head .k { color: var(--text-secondary); font-size: 12.5px; }
+.live-head .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.live-head .d { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.scrub { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.scrub input { flex: 1; accent-color: var(--series-1); }
+.cap { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 4px; }
+.cap b { color: var(--text-primary); }
+#hist tr.row { cursor: pointer; }
+#hist tr.row:hover td { background: var(--surface-0); }
+#hist tr.sel td { background: var(--surface-0); font-weight: 600; }
+summary { cursor: pointer; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="top">
+    <h1>P5 pipeline</h1>
+    <span id="state" class="pill"><span class="dot"></span><span>…</span></span>
+    <span class="muted" id="last"></span>
+    <span class="spacer"></span>
+    <span class="muted" id="clock"></span>
+    <button id="start">Start step 2</button>
+    <button id="stop">Stop step 2</button>
+    <button id="evalnow">Evaluate now</button>
+  </div>
+
+  <div class="grid">
+    <div class="card tile s3"><div class="label">Scans processed</div>
+      <div class="value" id="t-done">–</div><div class="sub" id="t-done-sub"></div>
+      <div class="bar"><div id="t-bar" style="width:0"></div></div></div>
+    <div class="card tile s3"><div class="label">Speed</div>
+      <div class="value" id="t-rate">–</div><div class="sub" id="t-eta"></div></div>
+    <div class="card tile s3"><div class="label">Patches</div>
+      <div class="value" id="t-patches">–</div><div class="sub" id="t-patches-sub"></div></div>
+    <div class="card tile s3"><div class="label">Disk used by patches</div>
+      <div class="value" id="t-disk">–</div><div class="sub" id="t-disk-sub"></div>
+      <div class="bar"><div id="t-diskbar" style="width:0"></div></div></div>
+
+    <div class="card s6">
+      <h2>Does more data help? AUC after each retrain</h2>
+      <div class="legend" id="auc-legend"></div>
+      <div class="chart" id="auc-chart"></div>
+      <div class="note" id="auc-note"></div>
+    </div>
+    <div class="card s6">
+      <h2>Grad-CAM centre score</h2>
+      <div class="chart" id="cam-chart"></div>
+      <div class="note">Share of the heat map in the central 24 mm, where the lesion is.
+        0.05 = no focus on the lesion (dashed line). Higher is better.</div>
+    </div>
+
+    <div class="card s12">
+      <h2>Current evaluation <span class="muted" id="eval-state"></span></h2>
+      <div class="live-head" id="live-head"></div>
+      <div class="legend" id="live-legend"></div>
+      <div class="pair">
+        <div><div class="minihead">Train loss <span class="muted">(lower is better)</span></div><div class="chart" id="loss-chart"></div></div>
+        <div><div class="minihead">Val AUC <span class="muted">(higher is better)</span></div><div class="chart" id="vauc-chart"></div></div>
+      </div>
+      <div class="note">Grey = the previous checkpoint, trained on fewer scans. The val split also grows a little
+        between checkpoints, so compare the trend, not the third decimal.</div>
+      <details style="margin-top:10px"><summary class="muted">Evaluation output</summary>
+        <div class="log" id="eval-log" style="height:150px;margin-top:6px"></div></details>
+    </div>
+
+    <div class="card s7">
+      <h2>Grad-CAM over time</h2>
+      <div class="scrub">
+        <span class="muted">Checkpoint</span>
+        <input type="range" id="cam-slider" min="0" max="0" value="0">
+        <span id="cam-pick" class="muted"></span>
+      </div>
+      <div class="pair" id="cam-pair"><div class="empty">No evaluation yet</div></div>
+      <div class="note">The same val cancers come first in every snapshot, so tile N is the same patch in both pictures.
+        Look for the heat moving onto the nodule in the centre.</div>
+    </div>
+    <div class="card s5">
+      <h2>Evaluation history <span class="muted">· click a row to show its Grad-CAM</span></h2>
+      <div style="overflow:auto"><table id="hist"></table></div>
+    </div>
+
+    <div class="card s4">
+      <h2>Patches per split</h2>
+      <table id="counts"></table>
+    </div>
+    <div class="card s4">
+      <h2>Most common problems</h2>
+      <table id="problems"></table>
+    </div>
+    <div class="card s4">
+      <h2>Step 2 output</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(v).trim();
+const fmt = (v, d = 3) => v == null || isNaN(v) ? "–" : Number(v).toFixed(d);
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
+const SERIES = [
+  { key: "auc_all", name: "All patches", color: "--series-1" },
+  { key: "auc_benign", name: "Cancer vs benign", color: "--series-2" },
+  { key: "auc_random", name: "Cancer vs random", color: "--series-3" },
+];
+$("auc-legend").innerHTML = SERIES.map(s => `<span><i style="background:var(${s.color})"></i>${s.name}</span>`).join("");
+
+/* Line chart on one y axis: optional dashed reference line, direct end labels, hover crosshair.
+   opts: x (key on each row), xLabel, tipHead(row), markers, height, plus y range and ref line. */
+function lineChart(el, rows, series, opts) {
+  const { yMin = Infinity, yMax = -Infinity, ref, refLabel, digits = 3, x: xk = "scans_done",
+          xLabel = "scans processed", tipHead, markers = true, size = 440, empty } = opts;
+  if (!rows.length) { el.innerHTML = `<div class="empty">${empty || "Appears after the first evaluation"}</div>`; return; }
+  const m = { l: 44, r: 128, t: 10, b: 34 };            // square plot area: easier to read the trend
+  const plot = Math.max(160, Math.min(size, (el.clientWidth || size + m.l + m.r) - m.l - m.r));
+  const W = plot + m.l + m.r, H = plot + m.t + m.b;
+  const xs = rows.map(r => r[xk]);
+  let x0 = Math.min(...xs), x1 = Math.max(...xs);
+  if (x0 === x1) { x0 = Math.max(0, x0 - 1); x1 = x1 + 1; }
+  const vals = rows.flatMap(r => series.map(s => r[s.key])).filter(v => v != null);
+  let lo = Math.min(yMin, ...vals), hi = Math.max(yMax, ...vals);
+  if (hi - lo < 0.02) { lo -= 0.01; hi += 0.01; }
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  const span = hi - lo, step = span > 0.6 ? 0.2 : span > 0.3 ? 0.1 : span > 0.12 ? 0.05 : span > 0.05 ? 0.02 : 0.01;
+  const dec = step >= 0.1 ? 1 : 2;
+  let g = "";
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9; v += step)
+    g += `<line class="gridline" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/>
+          <text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(dec)}</text>`;
+  const ticks = [...new Set(xs)];
+  const every = Math.ceil(ticks.length / 8);
+  let lastTick = -Infinity;                             // skip labels that would overlap the previous one
+  ticks.sort((a, b) => a - b).forEach((t, i) => {
+    if ((i % every === 0 || i === ticks.length - 1) && X(t) - lastTick > 34) {
+      g += `<text x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle">${t}</text>`; lastTick = X(t); } });
+  g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 1}" text-anchor="middle">${xLabel}</text>`;
+  let body = "";
+  const ends = [];
+  if (ref != null) {
+    body += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(ref)}" y2="${Y(ref)}"/>`;
+    ends.push({ y: Y(ref), text: refLabel, cls: "reflabel" });
+  }
+  series.forEach(s => {
+    const have = rows.filter(r => r[s.key] != null);
+    const pts = have.map(r => [X(r[xk]), Y(r[s.key])]);
+    if (!pts.length) return;
+    const col = css(s.color);
+    body += `<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" points="${pts.join(" ")}"/>`;
+    const ring = `stroke="${css("--surface-1")}" stroke-width="2"`;
+    if (markers) pts.forEach(p => body += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${col}" ${ring}/>`);
+    else body += `<circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="4" fill="${col}" ${ring}/>`;
+    const v = have.at(-1)[s.key];
+    ends.push({ y: Y(v), text: series.length > 1 ? `${s.label || s.name} ${fmt(v, digits)}` : fmt(v, digits) });
+  });
+  ends.sort((a, b) => a.y - b.y);                       // direct labels at line ends, nudged apart
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 14);
+  ends.forEach(e => body += `<text class="${e.cls || "dlabel"}" x="${W - m.r + 8}" y="${e.y + 4}">${esc(e.text)}</text>`);
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;height:${H}px" role="img"><g class="axis">${g}</g>${body}
+      <line class="xhair" y1="${m.t}" y2="${H - m.b}" style="display:none"/>
+      <rect x="${m.l - 10}" y="0" width="${W - m.l - m.r + 20}" height="${H}" fill="transparent"/></svg><div class="tip"></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector(".xhair");
+  svg.addEventListener("mousemove", ev => {
+    const b = svg.getBoundingClientRect(), mx = (ev.clientX - b.left) * W / b.width;
+    const r = rows.reduce((a, c) => Math.abs(X(c[xk]) - mx) < Math.abs(X(a[xk]) - mx) ? c : a);
+    xh.setAttribute("x1", X(r[xk])); xh.setAttribute("x2", X(r[xk])); xh.style.display = "";
+    tip.innerHTML = `<div class="muted">${tipHead ? tipHead(r) : r[xk]}</div>` + series.filter(s => r[s.key] != null)
+      .map(s => `<div><span class="sw" style="background:var(${s.color})"></span>${s.name}: <b>${fmt(r[s.key], digits)}</b></div>`).join("");
+    tip.style.display = "block";
+    const off = b.left - el.getBoundingClientRect().left;      // the svg is centred in the card
+    const px = off + X(r[xk]) * b.width / W;
+    tip.style.left = Math.min(px + 12, el.clientWidth - tip.offsetWidth) + "px"; tip.style.top = "10px";
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.display = "none"; xh.style.display = "none"; });
+}
+
+let lastHistLen = -1, lastData = null, lastLiveKey = null, selRun = null;
+function render(d) {
+  lastData = d;
+  const s = d.step2, p = d.patches, e = d.eval;
+  const labels = { running: "Step 2 running", external: "Step 2 running (started elsewhere)",
+                   stopped: "Step 2 stopped", finished: "Step 2 finished" };
+  $("state").className = "pill " + (s.state === "external" ? "running" : s.state);
+  $("state").lastElementChild.textContent = labels[s.state];
+  $("last").textContent = s.last || "";
+  $("clock").textContent = "updated " + d.time;
+  $("start").disabled = s.state === "running" || s.state === "external" || s.state === "finished";
+  $("stop").disabled = s.state !== "running";
+  $("evalnow").disabled = e.running;
+
+  $("t-done").textContent = `${s.done.toLocaleString()} / ${s.total.toLocaleString()}`;
+  $("t-done-sub").textContent = `${(100 * s.done / s.total).toFixed(1)}% · ${(s.total - s.done).toLocaleString()} to go`;
+  $("t-bar").style.width = (100 * s.done / s.total) + "%";
+  $("t-rate").textContent = s.rate ? `${Math.round(s.rate)} /h` : "–";
+  $("t-eta").textContent = s.eta_h != null ? `≈ ${Math.floor(s.eta_h)} h ${Math.round(s.eta_h % 1 * 60)} min left`
+                                           : "measured over the last 30 min";
+  $("t-patches").textContent = p.total.toLocaleString();
+  const kinds = {};
+  Object.values(p.by_split).forEach(r => Object.entries(r).forEach(([k, v]) => kinds[k] = (kinds[k] || 0) + v));
+  $("t-patches-sub").textContent = `${kinds.cancer || 0} cancer · ${kinds.benign || 0} benign · ${kinds.random || 0} random · ${p.patients} patients`;
+  $("t-disk").textContent = `${p.gb.toFixed(1)} GB`;
+  $("t-disk-sub").textContent = `budget ${p.max_gb} GB`;
+  $("t-diskbar").style.width = Math.min(100, 100 * p.gb / p.max_gb) + "%";
+
+  const K = ["cancer", "benign", "random"];
+  $("counts").innerHTML = `<tr><th>split</th>${K.map(k => `<th>${k}</th>`).join("")}<th>total</th></tr>` +
+    ["train", "val", "test"].filter(x => p.by_split[x]).map(x => { const r = p.by_split[x];
+      return `<tr><td>${x}</td>${K.map(k => `<td>${r[k] || 0}</td>`).join("")}<td>${K.reduce((a, k) => a + (r[k] || 0), 0)}</td></tr>`; }).join("");
+  const pr = Object.entries(d.problems);
+  $("problems").innerHTML = pr.length ? `<tr><th>problem</th><th>count</th></tr>` +
+    pr.map(([k, v]) => `<tr><td class="wrap">${esc(k)}</td><td>${v}</td></tr>`).join("") : `<tr><td class="muted">none</td></tr>`;
+
+  const stick = el => el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  for (const [id, lines] of [["log", s.log], ["eval-log", e.log]]) {
+    const el = $(id), atEnd = stick(el);
+    el.textContent = lines.join("\n") || "(no output yet)";
+    if (atEnd) el.scrollTop = el.scrollHeight;
+  }
+  const h = e.history;
+  const cur = e.current, prev = e.previous;
+  $("eval-state").textContent = e.running
+    ? `· retraining on ${cur ? cur.n_train.toLocaleString() + " patches from " + cur.scans_done.toLocaleString() + " scans" : "…"}`
+    : e.every == null
+      ? `· idle, final evaluation (${e.epochs} epochs, ${e.split} split) starts when all ${e.next_at.toLocaleString()} scans are done`
+      : `· idle, next after ${e.next_at.toLocaleString()} scans (every ${e.every}), ${e.epochs} epochs, on the ${e.split} split`;
+
+  const liveKey = JSON.stringify([cur && cur.run, cur && cur.curve.length, prev && prev.run, e.running]);
+  if (liveKey !== lastLiveKey) { lastLiveKey = liveKey; drawLive(cur, prev, e.running); }
+
+  if (h.length !== lastHistLen) {
+    lastHistLen = h.length;
+    drawCharts(h);
+    const slider = $("cam-slider");
+    slider.max = Math.max(0, h.length - 1);
+    if (selRun == null || !h.some(r => r.run === selRun)) selRun = h.length ? h[0].run : null;  // default: first vs latest
+    drawHistory(h);
+    drawCams(h);
+  }
+}
+
+/* Train loss + val AUC per epoch of the running (or latest) evaluation, previous checkpoint in grey. */
+function drawLive(cur, prev, running) {
+  const c = cur ? cur.curve : [], q = prev ? prev.curve : [];
+  const n = Math.max(c.length, q.length);
+  const rows = Array.from({ length: n }, (_, i) => ({
+    epoch: i + 1,
+    loss: c[i]?.train_loss, loss_prev: q[i]?.train_loss,
+    auc: c[i]?.val_auc, auc_prev: q[i]?.val_auc,
+  }));
+  const nowName = cur ? `This checkpoint (${cur.scans_done.toLocaleString()} scans)` : "This checkpoint";
+  const prevName = prev ? `Previous (${prev.scans_done.toLocaleString()} scans)` : "Previous";
+  $("live-legend").innerHTML = `<span><i style="background:var(--series-1)"></i>${nowName}</span>` +
+    (prev ? `<span><i style="background:var(--prev)"></i>${prevName}</span>` : "");
+  const S = (key, keyPrev) => [{ key, name: nowName, label: "now", color: "--series-1" },
+                               { key: keyPrev, name: prevName, label: "prev", color: "--prev" }];
+  const common = { x: "epoch", xLabel: "epoch", markers: false, size: 360,
+                   tipHead: r => `epoch ${r.epoch}`, empty: running ? "Waiting for the first epoch…" : "No evaluation yet" };
+  lineChart($("loss-chart"), rows, S("loss", "loss_prev"), { ...common });
+  lineChart($("vauc-chart"), rows, S("auc", "auc_prev"), { ...common });
+
+  // Headline numbers: where this run is, and how much better than the previous checkpoint
+  if (!c.length) { $("live-head").innerHTML = ""; return; }
+  const last = c.at(-1), best = c.reduce((a, r) => r.val_auc > a.val_auc ? r : a);
+  const prevBest = q.length ? Math.max(...q.map(r => r.val_auc)) : null;
+  const prevSame = q[c.length - 1]?.train_loss;
+  const sign = v => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(3);
+  const block = (k, v, d) => `<div><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  $("live-head").innerHTML =
+    block(running ? "Epoch" : "Finished", `${last.epoch} / ${cur.epochs}`, running ? `${Math.round(100 * last.epoch / cur.epochs)}% done` : "evaluation complete") +
+    block("Train loss", fmt(last.train_loss), `${sign(last.train_loss - c[0].train_loss)} since epoch 1` +
+          (prevSame != null ? ` · prev at epoch ${last.epoch}: ${fmt(prevSame)}` : "")) +
+    block("Best val AUC", fmt(best.val_auc), `at epoch ${best.epoch}` +
+          (prevBest != null ? ` · ${sign(best.val_auc - prevBest)} vs previous checkpoint (${fmt(prevBest)})` : ""));
+}
+
+function drawHistory(h) {
+  $("hist").innerHTML = `<tr><th>finished</th><th>scans</th><th>train (cancer)</th><th>epochs</th><th>AUC all</th>
+    <th>vs benign</th><th>vs random</th><th>centre</th><th>min</th></tr>` + h.slice().reverse().map(r =>
+    `<tr class="row${r.run === selRun ? " sel" : ""}" data-run="${r.run}"><td>${r.finished.slice(5)}</td><td>${r.scans_done}</td>
+     <td>${r.n_train} (${r.n_train_cancer})</td><td>${r.epochs ?? "–"}</td><td>${fmt(r.auc_all)}</td><td>${fmt(r.auc_benign)}</td>
+     <td>${fmt(r.auc_random)}</td><td>${fmt(r.centre, 2)}</td><td>${r.minutes}</td></tr>`).join("");
+  $("hist").querySelectorAll("tr.row").forEach(tr => tr.onclick = () => {
+    selRun = tr.dataset.run; drawHistory(h); drawCams(h);
+  });
+}
+
+/* Grad-CAM of the chosen checkpoint next to the latest one. */
+function drawCams(h) {
+  if (!h.length) return;
+  const i = Math.max(0, h.findIndex(r => r.run === selRun)), a = h[i], b = h.at(-1);
+  $("cam-slider").value = i;
+  $("cam-pick").textContent = `${i + 1} of ${h.length}`;
+  const pane = (r, title) => `<div><div class="cap">${title} · <b>${r.scans_done.toLocaleString()} scans</b>,
+      ${r.n_train.toLocaleString()} train patches · centre score <b>${fmt(r.centre, 2)}</b> · AUC <b>${fmt(r.auc_all)}</b></div>
+      <img class="cam" alt="Grad-CAM after ${r.scans_done} scans" src="/runs/${r.run}/gradcam.png"></div>`;
+  $("cam-pair").innerHTML = a.run === b.run ? pane(b, "Latest") + `<div class="empty">Pick an earlier checkpoint to compare</div>`
+                                            : pane(a, "Checkpoint " + (i + 1)) + pane(b, "Latest");
+}
+$("cam-slider").oninput = ev => {
+  const h = lastData.eval.history; selRun = h[+ev.target.value].run; drawHistory(h); drawCams(h);
+};
+
+function drawCharts(h) {
+  lineChart($("auc-chart"), h, SERIES, { yMin: 0.5, yMax: 1, ref: 0.5, refLabel: "chance (0.5)",
+            tipHead: r => `${r.scans_done} scans · ${r.n_train} train patches (${r.n_train_cancer} cancer)` });
+  lineChart($("cam-chart"), h, [{ key: "centre", name: "Centre score", color: "--series-1" }],
+            { yMin: 0, yMax: 0.3, ref: 0.05, refLabel: "no focus", digits: 2, tipHead: r => `${r.scans_done} scans` });
+  $("auc-note").textContent = h.length ? `Each point = the CNN retrained from scratch on the patches available then, scored on the
+    ${h.at(-1).split} split. Watch "cancer vs benign": that is the real question.` : "";
+}
+
+async function poll() {
+  let data;
+  try { data = await (await fetch("/api/status")).json(); }
+  catch { $("clock").textContent = "dashboard server not reachable"; return; }
+  try { render(data); }
+  catch (err) { $("clock").textContent = "display error: " + err.message; console.error(err); }
+}
+const post = url => fetch(url, { method: "POST" }).then(poll);
+$("start").onclick = () => post("/api/step2/start");
+$("stop").onclick = () => { if (confirm("Stop step 2? It resumes where it left off when you start it again.")) post("/api/step2/stop"); };
+$("evalnow").onclick = () => post("/api/eval/start");
+const redraw = () => { if (!lastData) return; const e = lastData.eval;
+  drawCharts(e.history); drawLive(e.current, e.previous, e.running); };
+window.addEventListener("resize", redraw);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
+poll(); setInterval(poll, 3000);
+</script>
+</body>
+</html>
