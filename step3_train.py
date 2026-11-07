@@ -6,9 +6,17 @@ Run:
   python step3_train.py             # real training; keeps the model with the best val AUC
   python step3_train.py --test      # ONCE at the very end: AUC on the test split
 
+Options for clean experiments (step3_experiments.py runs the whole grid):
+  --epochs 120        instead of EPOCHS in config.py
+  --fraction 0.5      train on this share of the training PATIENTS (same cancer share)
+  --seed 43           another random start
+  --cosine            cosine learning-rate schedule (lr slides from 1e-3 to 0)
+  --out NAME          save to models/runs/NAME/ instead of models/best.pt
+
 Writes: models/best.pt, models/log.csv, checks/training_curves.png, models/test_predictions.csv
 """
 import argparse
+import time
 
 import matplotlib
 matplotlib.use("Agg")
@@ -17,9 +25,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
-from config import BATCH_SIZE, CHECK_DIR, EPOCHS, LEARNING_RATE, MODEL_DIR, SEED
+from config import BATCH_SIZE, CHECK_DIR, EPOCHS, LEARNING_RATE, MODEL_DIR, SEED, STAGE1_MODEL
 from step3_model import PatchCNN, PatchDataset
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -49,7 +58,7 @@ def train_one_epoch(model, loader, loss_fn, optimizer):
     return total / len(loader.dataset)
 
 
-def plot_log(log):
+def plot_log(log, path):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     ax1.plot(log["epoch"], log["train_loss"], label="train")
     ax1.plot(log["epoch"], log["val_loss"], label="val")
@@ -57,15 +66,26 @@ def plot_log(log):
     ax2.plot(log["epoch"], log["val_auc"])
     ax2.set_xlabel("epoch"); ax2.set_ylabel("val AUC")
     fig.tight_layout()
-    fig.savefig(CHECK_DIR / "training_curves.png", dpi=80)
+    fig.savefig(path, dpi=80)
     plt.close(fig)
 
 
-def train(overfit):
-    torch.manual_seed(SEED)
+def some_patients(df, fraction, seed):
+    """All patches of a random `fraction` of the patients, stratified so the cancer share stays."""
+    patient_label = df.groupby("pid")["label"].max()
+    keep, _ = train_test_split(patient_label.index, train_size=fraction,
+                               stratify=patient_label, random_state=seed)
+    return df[df["pid"].isin(keep)].reset_index(drop=True)
+
+
+def train(overfit, epochs=EPOCHS, fraction=1.0, seed=SEED, cosine=False, out=None):
+    """Returns a summary dict. out=None writes models/best.pt; otherwise models/runs/<out>/."""
+    t0 = time.time()
+    torch.manual_seed(seed)
     train_ds = PatchDataset("train", augment=not overfit)
     val_ds = PatchDataset("val", augment=False)
-    epochs = EPOCHS
+    if fraction < 1:
+        train_ds.df = some_patients(train_ds.df, fraction, seed)
     if overfit:   # only 10 cancers + 10 non-cancers, no augmentation
         train_ds.df = train_ds.df.groupby("label").head(10).reset_index(drop=True)
         epochs = 100
@@ -82,12 +102,16 @@ def train(overfit):
 
     model = PatchCNN().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    MODEL_DIR.mkdir(exist_ok=True)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs) if cosine else None
+    folder = MODEL_DIR if out is None else MODEL_DIR / "runs" / out
+    folder.mkdir(parents=True, exist_ok=True)
     CHECK_DIR.mkdir(exist_ok=True)
     log, best_auc = [], 0.0
 
     for epoch in range(1, epochs + 1):
         train_loss = train_one_epoch(model, train_dl, loss_fn, optimizer)
+        if scheduler:
+            scheduler.step()
         if overfit:
             print(f"epoch {epoch:3d}  train loss {train_loss:.3f}")
             continue
@@ -99,21 +123,28 @@ def train(overfit):
 
         if val_auc > best_auc:                   # keep the best model, not the last one
             best_auc = val_auc
-            torch.save(model.state_dict(), MODEL_DIR / "best.pt")
+            torch.save(model.state_dict(), folder / "best.pt")
 
     if overfit:
         verdict = "OK" if train_loss < 0.1 else "NOT OK - look for a bug before training for real"
         print(f"\nOverfit check: final train loss {train_loss:.3f} (should be below 0.1): {verdict}")
-    else:
-        pd.DataFrame(log).to_csv(MODEL_DIR / "log.csv", index=False)
-        plot_log(pd.DataFrame(log))
-        print(f"\nBest val AUC {best_auc:.3f}, saved to {MODEL_DIR / 'best.pt'}")
+        return {"train_loss": train_loss}
+    log = pd.DataFrame(log)
+    log.to_csv(folder / "log.csv", index=False)
+    plot_log(log, CHECK_DIR / "training_curves.png" if out is None else folder / "training_curves.png")
+    last10 = log["val_auc"].tail(10).mean()
+    print(f"\nBest val AUC {best_auc:.3f} (mean of the last 10 epochs {last10:.3f}), "
+          f"saved to {folder / 'best.pt'}")
+    return {"n_train": len(train_ds), "n_train_cancer": n_pos, "best_val_auc": best_auc,
+            "best_epoch": int(log.loc[log["val_auc"].idxmax(), "epoch"]), "last10_val_auc": last10,
+            "minutes": round((time.time() - t0) / 60, 1)}
 
 
 def test():
+    """The FROZEN model (models/stage1_final.pt), not best.pt: every training run overwrites best.pt."""
     test_ds = PatchDataset("test", augment=False)
     model = PatchCNN().to(DEVICE)
-    model.load_state_dict(torch.load(MODEL_DIR / "best.pt", map_location=DEVICE))
+    model.load_state_dict(torch.load(STAGE1_MODEL, map_location=DEVICE))
     logits, labels = predict(model, DataLoader(test_ds, batch_size=64, num_workers=4))
 
     df = test_ds.df.assign(prob=torch.sigmoid(logits).numpy().ravel())
@@ -129,5 +160,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--overfit", action="store_true")
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
+    parser.add_argument("--fraction", type=float, default=1.0)
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--cosine", action="store_true")
+    parser.add_argument("--out", default=None)
     args = parser.parse_args()
-    test() if args.test else train(args.overfit)
+    if args.test:
+        test()
+    else:
+        train(args.overfit, args.epochs, args.fraction, args.seed, args.cosine, args.out)

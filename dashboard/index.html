@@ -90,16 +90,49 @@ img.cam { width: 100%; border-radius: 6px; background: #fff; }
 #hist tr.row:hover td { background: var(--surface-0); }
 #hist tr.sel td { background: var(--surface-0); font-weight: 600; }
 summary { cursor: pointer; font-size: 12.5px; }
+/* tabs + per-tab toolbar */
+.tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); }
+.tabs button { border: 0; background: transparent; padding: 5px 16px; border-radius: 6px; color: var(--text-secondary); font-weight: 600; }
+.tabs button[aria-selected="true"] { background: var(--surface-0); color: var(--text-primary); }
+.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar .spacer { flex: 1; }
+[hidden] { display: none !important; }
+/* Stage 2 */
+.runbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.runbar .grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.runbar .grp + .grp { padding-left: 22px; border-left: 1px solid var(--grid); }
+.runbar label { color: var(--text-secondary); font-size: 13px; display: inline-flex; gap: 5px; align-items: center; }
+select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+.state { font-size: 12.5px; color: var(--text-muted); }
+.warnicon { color: var(--warn); font-weight: 700; }
+.mini td, .mini th { padding: 4px 8px; }
+#res tr.row { cursor: pointer; }
+#res tr.row:hover td { background: var(--surface-0); }
+#res tr.sel td { background: var(--surface-0); font-weight: 600; }
+.gridimg { max-height: 560px; overflow: auto; border-radius: 6px; background: #fff; }
+.gridimg img { width: 100%; display: block; }
+.chart .hit { fill: transparent; }
+.chart .hit:hover { fill: var(--surface-0); }
+.chart .mark { pointer-events: none; }
 </style>
 </head>
 <body>
 <div class="viz-root">
   <div class="top">
     <h1>P5 pipeline</h1>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabbtn-stage1" data-tab="stage1" aria-selected="true">Stage 1</button>
+      <button role="tab" id="tabbtn-stage2" data-tab="stage2" aria-selected="false">Stage 2</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="muted" id="clock"></span>
+  </div>
+
+  <section id="tab-stage1" role="tabpanel" aria-labelledby="tabbtn-stage1">
+  <div class="toolbar">
     <span id="state" class="pill"><span class="dot"></span><span>…</span></span>
     <span class="muted" id="last"></span>
     <span class="spacer"></span>
-    <span class="muted" id="clock"></span>
     <button id="start">Start step 2</button>
     <button id="stop">Stop step 2</button>
     <button id="evalnow">Evaluate now</button>
@@ -173,6 +206,112 @@ summary { cursor: pointer; font-size: 12.5px; }
       <div class="log" id="log"></div>
     </div>
   </div>
+  </section>
+
+  <section id="tab-stage2" role="tabpanel" aria-labelledby="tabbtn-stage2" hidden>
+  <div class="toolbar">
+    <span id="s2-state" class="pill"><span class="dot"></span><span>…</span></span>
+    <span class="muted" id="s2-last"></span>
+    <span class="spacer"></span>
+    <button id="s2-start">Start step 4a</button>
+    <button id="s2-stop">Stop step 4a</button>
+  </div>
+
+  <div class="grid">
+    <div class="card tile s3"><div class="label">Patients tracked (step 4a)</div>
+      <div class="value" id="s2-done">–</div><div class="sub" id="s2-done-sub"></div>
+      <div class="bar"><div id="s2-bar" style="width:0"></div></div></div>
+    <div class="card tile s3"><div class="label">Speed</div>
+      <div class="value" id="s2-rate">–</div><div class="sub" id="s2-eta"></div></div>
+    <div class="card tile s3"><div class="label">Tracks</div>
+      <div class="value" id="s2-tracks">–</div><div class="sub" id="s2-tracks-sub"></div></div>
+    <div class="card tile s3"><div class="label">Disk used (patches + tracks)</div>
+      <div class="value" id="s2-disk">–</div><div class="sub" id="s2-disk-sub"></div>
+      <div class="bar"><div id="s2-diskbar" style="width:0"></div></div></div>
+
+    <div class="card s12">
+      <h2>Run</h2>
+      <div class="runbar">
+        <div class="grp"><button id="s2-check">Check tracks</button><span class="state" id="s2-check-state"></span></div>
+        <div class="grp"><button id="s2-embed">Compute embeddings (4b)</button><span class="state" id="s2-embed-state"></span></div>
+        <div class="grp">
+          <label>Screenings <select id="s2-k"><option>1</option><option selected>2</option><option>3</option></select></label>
+          <label><input type="checkbox" id="s2-early"> a year early</label>
+          <label><input type="checkbox" id="s2-plain"> no change input</label>
+          <button id="s2-train">Train tracker (4c)</button>
+          <button id="s2-overfit">Overfit check</button>
+        </div>
+        <div class="grp"><button id="s2-plan">Run the evaluation plan</button><button id="s2-jobstop">Stop</button></div>
+      </div>
+      <div class="note" id="s2-job-state"></div>
+      <div class="note">The evaluation plan runs, in order: overfit check, 2 and 3 screenings, 2 a year early,
+        1 screening (sanity), 3 without the change input. All on the validation split. Test runs
+        (<code>--test</code>) are command line only: once per setting, at the very end.</div>
+    </div>
+
+    <div class="card s4">
+      <h2>Alignment vs radiologist boxes</h2>
+      <div class="live-head" id="s2-align-head"></div>
+      <table class="mini" id="s2-align"></table>
+      <div class="note">Distance from the matched point (before snapping) to the box on earlier screenings that
+        have their own box. The benign rows use the blob finder as "truth": a large distance there mostly means
+        the blob finder picked a different blob that year.</div>
+    </div>
+    <div class="card s4">
+      <h2>Template match score <span class="muted">· earlier screenings</span></h2>
+      <div class="chart" id="s2-match"></div>
+      <div class="note" id="s2-match-note"></div>
+    </div>
+    <div class="card s4">
+      <h2>Tracks</h2>
+      <table class="mini" id="s2-len"></table>
+      <table class="mini" id="s2-split" style="margin-top:10px"></table>
+      <div class="note" id="s2-source"></div>
+    </div>
+
+    <div class="card s5">
+      <h2>Headroom: Stage 1 AUC by screenings before the anchor</h2>
+      <div class="chart" id="s2-headroom"></div>
+      <div class="note" id="s2-headroom-note"></div>
+    </div>
+    <div class="card s7">
+      <h2>Does history help? Tracker AUC − Stage 1 AUC</h2>
+      <div class="chart" id="s2-help"></div>
+      <div class="note">Latest validation run per setting, 95% CI from resampling patients. Right of 0 = the tracker
+        ranks better than Stage 1 on the same windows. "History helps" needs the whole interval right of 0.</div>
+    </div>
+
+    <div class="card s12">
+      <h2>Tracker results <span class="muted">· click a row to show its training curve</span></h2>
+      <div style="overflow:auto"><table id="res"></table></div>
+    </div>
+
+    <div class="card s12">
+      <h2>Tracker training <span class="muted" id="s2-curve-name"></span></h2>
+      <div class="pair">
+        <div><div class="minihead">Train loss <span class="muted">(lower is better)</span></div><div class="chart" id="s2-loss"></div></div>
+        <div><div class="minihead">Val AUC <span class="muted">(higher is better; dashed = Stage 1 on the same windows)</span></div><div class="chart" id="s2-vauc"></div></div>
+      </div>
+    </div>
+
+    <div class="card s12">
+      <h2>Track grids <span class="muted">· oldest screening left, anchor right; red + = the tracked point</span></h2>
+      <div class="pair">
+        <div><div class="minihead">Cancer</div><div class="gridimg" id="s2-grid-cancer"><div class="empty">Run "Check tracks"</div></div></div>
+        <div><div class="minihead">Benign</div><div class="gridimg" id="s2-grid-benign"><div class="empty">Run "Check tracks"</div></div></div>
+      </div>
+    </div>
+
+    <div class="card s6">
+      <h2>Step 4a output</h2>
+      <div class="log" id="s2-log"></div>
+    </div>
+    <div class="card s6">
+      <h2>Check / embed / tracker output</h2>
+      <div class="log" id="s2-joblog"></div>
+    </div>
+  </div>
+  </section>
 </div>
 
 <script>
@@ -393,22 +532,298 @@ function drawCharts(h) {
     ${h.at(-1).split} split. Watch "cancer vs benign": that is the real question.` : "";
 }
 
+/* ===================== Stage 2 ===================== */
+
+const PLAN = ["k2", "k3", "k2_early", "k1", "k3_plain"];     // order of CONTEXT.md 7.5
+const SETTING = { k1: "1 screening (sanity)", k2: "2 screenings", k3: "3 screenings",
+                  k2_early: "2 screenings, a year early", k3_plain: "3, no change input" };
+const settingName = s => SETTING[s] || s;
+const pct = v => v == null ? "–" : Math.round(100 * v) + "%";
+const signed = (v, d = 3) => v == null ? "–" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const withCi = (v, lo, hi, f = fmt) => v == null ? "–" : `${f(v)} <span class="muted">[${f(lo)}, ${f(hi)}]</span>`;
+function niceStep(span, target = 5) {      // 1, 2 or 5 times a power of ten
+  const raw = span / target, p = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 5, 10].map(m => m * p).find(s => s >= raw);
+}
+/* Tooltip inside a .chart element, next to svg x coordinate sx (viewBox units). */
+function showTip(el, svg, W, sx, html) {
+  const tip = el.querySelector(".tip"), b = svg.getBoundingClientRect();
+  tip.innerHTML = html; tip.style.display = "block";
+  const px = b.left - el.getBoundingClientRect().left + sx * b.width / W;
+  tip.style.left = Math.max(0, Math.min(px + 12, el.clientWidth - tip.offsetWidth)) + "px"; tip.style.top = "8px";
+}
+
+/* Horizontal interval chart: one row per item; dot = estimate, line = 95% CI, dashed reference line.
+   rows: [{label, v, lo, hi, tip}]  opts: ref, refLabel, cap (max x), signed, empty */
+function intervalChart(el, rows, opts) {
+  const { ref, refLabel, cap, digits = 3, empty = "No data yet" } = opts;
+  rows = rows.filter(r => r.v != null);
+  if (!rows.length) { el.innerHTML = `<div class="empty">${empty}</div>`; return; }
+  const m = { l: 178, r: 70, t: 22, b: 34 }, rowH = 36;
+  const W = Math.max(380, Math.min(760, el.clientWidth || 560)), H = m.t + m.b + rows.length * rowH;
+  const vals = rows.flatMap(r => [r.v, r.lo, r.hi]).filter(v => v != null).concat(ref != null ? [ref] : []);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max((hi - lo) * 0.08, 0.005); lo -= pad; hi += pad;
+  if (cap != null) hi = Math.min(hi, cap);
+  const X = v => m.l + (v - lo) / (hi - lo) * (W - m.l - m.r);
+  const step = niceStep(hi - lo, 5), dec = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  const label = v => v === 0 ? "0" : opts.signed ? signed(v, dec) : v.toFixed(dec);
+  let g = "", body = "";
+  for (let i = Math.ceil(lo / step - 1e-9); i * step <= hi + 1e-9; i++) {
+    const v = i * step;
+    g += `<line class="gridline" x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${H - m.b}"/>
+          <text x="${X(v)}" y="${H - m.b + 16}" text-anchor="middle">${label(v)}</text>`;
+  }
+  if (ref != null && ref >= lo && ref <= hi)
+    body += `<line class="ref" x1="${X(ref)}" x2="${X(ref)}" y1="${m.t - 4}" y2="${H - m.b}"/>
+             <text class="reflabel" x="${X(ref)}" y="${m.t - 9}" text-anchor="middle">${esc(refLabel || "")}</text>`;
+  const col = css(opts.color || "--series-1"), ring = css("--surface-1");
+  rows.forEach((r, i) => {
+    const y = m.t + i * rowH + rowH / 2;
+    body += `<rect class="hit" data-i="${i}" x="0" y="${y - rowH / 2}" width="${W}" height="${rowH}" rx="4"/>
+      <text class="dlabel mark" x="${m.l - 12}" y="${y + 4}" text-anchor="end">${esc(r.label)}</text>`;
+    if (r.lo != null && r.hi != null) {
+      const a = X(Math.max(lo, r.lo)), b = X(Math.min(hi, r.hi));
+      body += `<line class="mark" x1="${a}" x2="${b}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="2" stroke-linecap="round"/>
+        <line class="mark" x1="${a}" x2="${a}" y1="${y - 5}" y2="${y + 5}" stroke="${col}" stroke-width="2" stroke-linecap="round"/>
+        <line class="mark" x1="${b}" x2="${b}" y1="${y - 5}" y2="${y + 5}" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    body += `<circle class="mark" cx="${X(r.v)}" cy="${y}" r="5" fill="${col}" stroke="${ring}" stroke-width="2"/>
+      <text class="dlabel mark" x="${X(Math.min(hi, r.hi ?? r.v)) + 9}" y="${y + 4}">${opts.signed ? signed(r.v, digits) : fmt(r.v, digits)}</text>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;height:${H}px" role="img"><g class="axis">${g}</g>${body}</svg><div class="tip"></div>`;
+  const svg = el.querySelector("svg");
+  svg.querySelectorAll(".hit").forEach(h => h.addEventListener("mouseenter", () => {
+    const r = rows[+h.dataset.i]; showTip(el, svg, W, X(r.v), r.tip); }));
+  svg.addEventListener("mouseleave", () => el.querySelector(".tip").style.display = "none");
+}
+
+/* Histogram over equal bins on [0, 1]. Bars: 2px surface gap, 4px rounded tops, square baseline. */
+function histChart(el, counts, opts) {
+  const total = counts ? counts.reduce((a, b) => a + b, 0) : 0;
+  if (!total) { el.innerHTML = `<div class="empty">${opts.empty}</div>`; return; }
+  const m = { l: 44, r: 12, t: 10, b: 36 };
+  const W = Math.max(280, Math.min(480, el.clientWidth || 380)), H = 210;
+  const max = Math.max(...counts), step = Math.max(1, niceStep(max, 4)), top = Math.ceil(max / step) * step;
+  const bw = (W - m.l - m.r) / counts.length, Y = v => m.t + (1 - v / top) * (H - m.t - m.b), base = Y(0);
+  let g = "", body = "";
+  for (let v = 0; v <= top; v += step)
+    g += `<line class="gridline" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/>
+          <text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toLocaleString()}</text>`;
+  for (const t of [0, 0.25, 0.5, 0.75, 1])
+    g += `<text x="${m.l + t * (W - m.l - m.r)}" y="${base + 16}" text-anchor="middle">${t}</text>`;
+  g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 2}" text-anchor="middle">${esc(opts.xLabel)}</text>`;
+  const col = css("--series-1");
+  counts.forEach((c, i) => {
+    const x = m.l + i * bw + 1, w = Math.min(24, bw - 2), y = Y(c), r = Math.min(4, w / 2, base - y);
+    body += `<rect class="hit" data-i="${i}" x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${base - m.t}"/>`;
+    if (c > 0) body += `<path class="mark" fill="${col}" d="M${x},${base} V${y + r} Q${x},${y} ${x + r},${y}
+      H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${base} Z"/>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;height:${H}px" role="img"><g class="axis">${g}</g>${body}</svg><div class="tip"></div>`;
+  const svg = el.querySelector("svg");
+  svg.querySelectorAll(".hit").forEach(h => h.addEventListener("mouseenter", () => {
+    const i = +h.dataset.i, a = i / counts.length, b = (i + 1) / counts.length;
+    showTip(el, svg, W, m.l + (i + 0.5) * bw, `<div class="muted">match ${a.toFixed(2)}–${b.toFixed(2)}</div>
+      <b>${counts[i].toLocaleString()}</b> earlier cubes (${pct(counts[i] / total)})`); }));
+  svg.addEventListener("mouseleave", () => el.querySelector(".tip").style.display = "none");
+}
+
+let last2 = null, curve2 = null, selSetting = null, curveKey = null, lastHelpKey = null;
+function render2(d) {
+  last2 = d;
+  const a = d.step4a, s = d.summary, job = d.job, emb = d.embed, res = d.results;
+  const labels = { running: "Step 4a running", external: "Step 4a running (started elsewhere)",
+                   stopped: "Step 4a stopped", finished: "Step 4a finished" };
+  $("s2-state").className = "pill " + (a.state === "external" ? "running" : a.state);
+  $("s2-state").lastElementChild.textContent = labels[a.state];
+  $("s2-last").textContent = a.step2_running ? "Step 2 is still running: start step 4a after it, so every known lesion is used"
+                                             : (a.last || "");
+  $("clock").textContent = "updated " + d.time;
+  const busy4a = a.state === "running" || a.state === "external";
+  $("s2-start").disabled = busy4a || a.state === "finished" || a.step2_running;
+  $("s2-stop").disabled = a.state !== "running";
+
+  $("s2-done").textContent = `${a.done.toLocaleString()} / ${a.total.toLocaleString()}`;
+  $("s2-done-sub").textContent = a.total ? `${(100 * a.done / a.total).toFixed(1)}% · patients with ≥ 2 screenings up to their newest known lesion` : "";
+  $("s2-bar").style.width = (a.total ? 100 * a.done / a.total : 0) + "%";
+  $("s2-rate").textContent = a.rate ? `${Math.round(a.rate)} /h` : "–";
+  $("s2-eta").textContent = a.eta_h != null ? `≈ ${Math.floor(a.eta_h)} h ${Math.round(a.eta_h % 1 * 60)} min left` : "patients per hour, over the last 30 min";
+  $("s2-tracks").textContent = s ? s.tracks.toLocaleString() : "–";
+  const nTracks = lab => s && s.by_length[lab] ? Object.values(s.by_length[lab]).reduce((x, y) => x + y, 0) : 0;
+  $("s2-tracks-sub").textContent = s ? `${nTracks("1")} cancer · ${nTracks("0")} benign · ${s.cubes.toLocaleString()} cubes` : "appear when step 4a runs";
+  const gb = d.disk.patches + d.disk.tracks;
+  $("s2-disk").textContent = `${gb.toFixed(1)} GB`;
+  $("s2-disk-sub").textContent = `patches ${d.disk.patches.toFixed(1)} + tracks ${d.disk.tracks.toFixed(1)} · budget ${d.disk.max_gb} GB`;
+  $("s2-diskbar").style.width = Math.min(100, 100 * gb / d.disk.max_gb) + "%";
+
+  // Run controls: embeddings only on finished tracks; the tracker only on up-to-date embeddings
+  const ready = emb.exists && !emb.stale;
+  $("s2-check").disabled = !s;
+  $("s2-embed").disabled = !s || busy4a;
+  for (const id of ["s2-train", "s2-overfit", "s2-plan"]) $(id).disabled = !ready;
+  $("s2-jobstop").disabled = !job.running && !job.queue.length;
+  $("s2-check-state").textContent = d.check ? `last check: ${d.check.tracks.toLocaleString()} tracks` : "";
+  $("s2-embed-state").textContent = !emb.exists ? "not computed yet" : emb.stale ? "out of date: tracks changed" : "up to date";
+  $("s2-job-state").innerHTML = job.running ? `Running <b>${esc(job.label)}</b>` + (job.queue.length ? ` · then ${job.queue.map(esc).join(", ")}` : "")
+                                            : (ready ? "Idle." : "Idle. The tracker needs up-to-date embeddings (4b).");
+
+  drawAlignment(s); drawTrackTables(s, d.check);
+  histChart($("s2-match"), s && s.match ? s.match.hist : null, { xLabel: "match score (1 = identical anatomy)", empty: "Appears when tracks reach an earlier screening" });
+  $("s2-match-note").textContent = s && s.match ? `Median ${fmt(s.match.quantiles["0.5"], 2)}. Best match at the edge of the ±20 mm search: ${pct(s.match.edge_rate)} (the true spot may lie outside the search).` : "";
+  drawHeadroom(emb);
+  const helpKey = JSON.stringify([res.length, res.at(-1) && res.at(-1).time]);
+  if (helpKey !== lastHelpKey) { lastHelpKey = helpKey; drawHelp(res); drawResults(res); }
+
+  for (const k of ["cancer", "benign"]) {
+    const el = $("s2-grid-" + k), t = d.grids[k];
+    if (t && el.dataset.t !== String(t)) { el.dataset.t = t;
+      el.innerHTML = `<img alt="${k} tracks: T0, T1, T2 per row" src="/checks/tracks_${k}.png?t=${t}">`; }
+  }
+  const stick = el => el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  for (const [id, lines] of [["s2-log", a.log], ["s2-joblog", job.log]]) {
+    const el = $(id), atEnd = stick(el);
+    el.textContent = lines.join("\n") || "(no output yet)";
+    if (atEnd) el.scrollTop = el.scrollHeight;
+  }
+}
+
+function drawAlignment(s) {
+  const al = s && s.alignment, c = al && al.cancer.all;
+  const block = (k, v, d) => `<div><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  $("s2-align-head").innerHTML = c && c.n
+    ? block("Median error", `${fmt(c.median_mm, 1)} mm`, `${c.n} earlier cubes with a box`) +
+      block("Within 10 mm", pct(c.within_10), `within 15 mm: ${pct(c.within_15)}`)
+    : `<div class="empty" style="padding:10px 0">Appears when a cancer track reaches an earlier boxed screening</div>`;
+  if (!al) { $("s2-align").innerHTML = ""; return; }
+  const row = (name, x) => x && x.n ? `<tr><td>${name}</td><td>${x.n}</td><td>${fmt(x.median_mm, 1)}</td><td>${pct(x.within_10)}</td><td>${pct(x.within_15)}</td></tr>` : "";
+  $("s2-align").innerHTML = `<tr><th></th><th>n</th><th>median mm</th><th>≤ 10 mm</th><th>≤ 15 mm</th></tr>` +
+    row("cancer, 1 back", al.cancer["1y"]) + row("cancer, 2 back", al.cancer["2y"]) +
+    row(`<span class="muted">benign (blob finder)</span>`, al.benign.all);
+}
+
+function drawTrackTables(s, check) {
+  if (!s) { $("s2-len").innerHTML = `<tr><td class="muted">No tracks yet</td></tr>`; $("s2-split").innerHTML = ""; $("s2-source").textContent = ""; return; }
+  const L = ["1", "2", "3"], name = { "1": "cancer", "0": "benign" };
+  $("s2-len").innerHTML = `<tr><th>screenings</th>${L.map(n => `<th>${n}</th>`).join("")}<th>total</th></tr>` +
+    ["1", "0"].filter(l => s.by_length[l]).map(l => { const r = s.by_length[l];
+      return `<tr><td>${name[l]}</td>${L.map(n => `<td>${r[n] || 0}</td>`).join("")}<td>${L.reduce((x, n) => x + (r[n] || 0), 0)}</td></tr>`; }).join("");
+  $("s2-split").innerHTML = `<tr><th>split</th><th>cancer</th><th>benign</th></tr>` +
+    ["train", "val", "test"].filter(x => s.by_split[x]).map(x =>
+      `<tr><td>${x}</td><td>${s.by_split[x]["1"] || 0}</td><td>${s.by_split[x]["0"] || 0}</td></tr>`).join("");
+  const src = l => s.source[l] ? `${name[l]}: ${(s.source[l].known || 0).toLocaleString()} snapped to a known lesion, ${(s.source[l].aligned || 0).toLocaleString()} aligned only` : "";
+  let note = ["1", "0"].map(src).filter(Boolean).join(" · ");
+  if (check && check.same_crop) { const [same, n] = check.same_crop;
+    note += `<br>Anchor cubes identical to their step 2 patch: ${same.toLocaleString()} of ${n.toLocaleString()}` +
+      (same < n ? ` <span class="warnicon" title="a download lost a slice">⚠</span> see checks/stage2_crop_differs.csv` : " ✓"); }
+  $("s2-source").innerHTML = note;
+}
+
+function drawHeadroom(emb) {
+  const h = emb.headroom || [];
+  const name = k => k === 0 ? "anchor (newest known)" : `${k} screening${k > 1 ? "s" : ""} before`;
+  intervalChart($("s2-headroom"), h.map(r => ({ label: name(r.years_before), v: r.auc, lo: r.lo, hi: r.hi,
+    tip: `<div class="muted">${name(r.years_before)}</div>AUC <b>${fmt(r.auc)}</b> [${fmt(r.lo)}, ${fmt(r.hi)}]<br>${r.n_cancer} cancer · ${r.n_benign} benign cubes` })),
+    { ref: emb.ref ? emb.ref[0] : null, refLabel: emb.ref ? `val patches ${fmt(emb.ref[0])}` : "", cap: 1,
+      empty: "Appears after step 4b (Compute embeddings)" });
+  $("s2-headroom-note").innerHTML = emb.anchor ? `Validation cubes, cancer vs benign. Sanity: anchor cubes ${withCi(...emb.anchor)} vs
+    Stage 1's val patches ${withCi(...emb.ref)}: these should be close. A drop further back is where history could help.` : "";
+}
+
+function drawHelp(res) {
+  const latest = {};
+  res.filter(r => r.split === "val").forEach(r => latest[r.setting] = r);
+  const order = Object.keys(latest).sort((a, b) => (PLAN.indexOf(a) + 1 || 99) - (PLAN.indexOf(b) + 1 || 99));
+  intervalChart($("s2-help"), order.map(k => { const r = latest[k]; return {
+    label: settingName(k), v: r.auc_diff, lo: r.auc_diff_lo, hi: r.auc_diff_hi,
+    tip: `<div class="muted">${esc(settingName(k))} · ${r.n_eval} windows (${r.n_eval_cancer} cancer)</div>
+      Tracker <b>${fmt(r.auc_tracker)}</b> · Stage 1 <b>${fmt(r.auc_stage1)}</b> · trend <b>${fmt(r.auc_trend)}</b><br>
+      Difference <b>${signed(r.auc_diff)}</b> [${signed(r.auc_diff_lo)}, ${signed(r.auc_diff_hi)}]` }; }),
+    { ref: 0, refLabel: "no difference", signed: true, empty: "Appears after the first tracker run" });
+}
+
+function drawResults(res) {
+  if (!res.length) { $("res").innerHTML = `<tr><td class="muted">No tracker runs yet</td></tr>`; return; }
+  if (selSetting == null || !res.some(r => r.setting === selSetting)) selSetting = res.at(-1).setting;
+  const anchors = r => Object.entries(r.by_anchor || {}).map(([k, v]) => `${k} ${fmt(v.tracker, 2)} / ${fmt(v.stage1, 2)}`).join(" · ");
+  $("res").innerHTML = `<tr><th>setting</th><th>split</th><th>windows (cancer)</th><th>tracker AUC</th><th>Stage 1 AUC</th>
+    <th>trend AUC</th><th>tracker − Stage 1</th><th>spec @ 90% sens<br><span class="muted">tracker / Stage 1</span></th>
+    <th>best epoch</th><th>per anchor year<br><span class="muted">tracker / Stage 1</span></th><th>when</th></tr>` +
+    res.slice().reverse().map(r => `<tr class="row${r.setting === selSetting ? " sel" : ""}" data-s="${esc(r.setting)}">
+      <td>${esc(settingName(r.setting))}</td><td>${r.split}</td><td>${r.n_eval} (${r.n_eval_cancer})</td>
+      <td>${withCi(r.auc_tracker, r.auc_tracker_lo, r.auc_tracker_hi)}</td><td>${withCi(r.auc_stage1, r.auc_stage1_lo, r.auc_stage1_hi)}</td>
+      <td>${fmt(r.auc_trend)}</td><td>${withCi(r.auc_diff, r.auc_diff_lo, r.auc_diff_hi, signed)}</td>
+      <td>${fmt(r.spec90_tracker, 2)} / ${fmt(r.spec90_stage1, 2)}</td><td>${r.best_epoch}</td>
+      <td>${anchors(r)}</td><td>${esc(String(r.time).slice(5))}</td></tr>`).join("");
+  $("res").querySelectorAll("tr.row").forEach(tr => tr.onclick = () => { selSetting = tr.dataset.s; drawResults(res); });
+  loadCurve(res);
+}
+
+async function loadCurve(res) {
+  const r = res.filter(x => x.setting === selSetting).at(-1), key = JSON.stringify([selSetting, r && r.time]);
+  if (key === curveKey) return;
+  curveKey = key;
+  const d = await (await fetch(`/api/stage2/curve?setting=${encodeURIComponent(selSetting)}`)).json();
+  curve2 = { ...d, stage1: r ? r.auc_stage1 : null };     // kept apart: last2 is replaced every poll
+  drawCurve();
+}
+
+function drawCurve() {
+  const c = curve2;
+  $("s2-curve-name").textContent = c ? `· ${settingName(c.setting)}` : "";
+  const rows = c ? c.curve : [], common = { x: "epoch", xLabel: "epoch", markers: false, size: 360,
+    tipHead: r => `epoch ${r.epoch}`, empty: "Click a tracker run" };
+  lineChart($("s2-loss"), rows, [{ key: "train_loss", name: "Train loss", color: "--series-1" }], common);
+  const s1 = c && c.stage1 != null ? c.stage1 : null;
+  lineChart($("s2-vauc"), rows, [{ key: "val_auc", name: "Val AUC", color: "--series-1" }],
+            { ...common, ref: s1, refLabel: s1 != null ? `Stage 1 ${fmt(s1)}` : "",
+              ...(s1 != null ? { yMin: s1, yMax: s1 } : {}) });
+}
+
+const post2 = (url, body) => fetch(url, { method: "POST", body: body && JSON.stringify(body) }).then(poll);
+$("s2-start").onclick = () => post2("/api/step4a/start");
+$("s2-stop").onclick = () => { if (confirm("Stop step 4a? It resumes where it left off when you start it again.")) post2("/api/step4a/stop"); };
+$("s2-check").onclick = () => post2("/api/stage2/run", { what: "check" });
+$("s2-embed").onclick = () => post2("/api/stage2/run", { what: "embed" });
+const trackerReq = overfit => ({ what: "tracker", scans: +$("s2-k").value, early: $("s2-early").checked, plain: $("s2-plain").checked, overfit });
+$("s2-train").onclick = () => post2("/api/stage2/run", trackerReq(false));
+$("s2-overfit").onclick = () => post2("/api/stage2/run", trackerReq(true));
+$("s2-plan").onclick = () => post2("/api/stage2/run", { what: "plan" });
+$("s2-jobstop").onclick = () => post2("/api/stage2/stop");
+
+/* ===================== Tabs and polling ===================== */
+
+let tab = location.hash === "#stage2" ? "stage2" : "stage1";
+function showTab(t) {
+  tab = t;
+  for (const k of ["stage1", "stage2"]) {
+    $("tab-" + k).hidden = k !== t;
+    $("tabbtn-" + k).setAttribute("aria-selected", String(k === t));
+  }
+  history.replaceState(null, "", t === "stage2" ? "#stage2" : location.pathname);
+  poll().then(redraw);
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
 async function poll() {
+  const [url, draw] = tab === "stage2" ? ["/api/stage2", render2] : ["/api/status", render];
   let data;
-  try { data = await (await fetch("/api/status")).json(); }
+  try { data = await (await fetch(url)).json(); }
   catch { $("clock").textContent = "dashboard server not reachable"; return; }
-  try { render(data); }
+  try { draw(data); }
   catch (err) { $("clock").textContent = "display error: " + err.message; console.error(err); }
 }
 const post = url => fetch(url, { method: "POST" }).then(poll);
 $("start").onclick = () => post("/api/step2/start");
 $("stop").onclick = () => { if (confirm("Stop step 2? It resumes where it left off when you start it again.")) post("/api/step2/stop"); };
 $("evalnow").onclick = () => post("/api/eval/start");
-const redraw = () => { if (!lastData) return; const e = lastData.eval;
-  drawCharts(e.history); drawLive(e.current, e.previous, e.running); };
+const redraw = () => {
+  if (tab === "stage1" && lastData) { const e = lastData.eval; drawCharts(e.history); drawLive(e.current, e.previous, e.running); }
+  if (tab === "stage2" && last2) { lastHelpKey = null; render2(last2); drawCurve(); }
+};
 window.addEventListener("resize", redraw);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
-poll(); setInterval(poll, 3000);
+showTab(tab); setInterval(poll, 3000);
 </script>
 </body>
 </html>

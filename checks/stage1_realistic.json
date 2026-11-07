@@ -1,0 +1,23 @@
+{
+ "scans": 109,
+ "scan_failures": 1,
+ "records": 219,
+ "blobs": 159,
+ "lesions_boxed": 180,
+ "lesions_located": 46,
+ "box-located, all val cancers": [
+  0.9451488743645606,
+  0.9199733088182253,
+  0.9672782304955166
+ ],
+ "box-located, same lesions": [
+  0.9848820687695368,
+  0.9733408702201883,
+  0.9932728152598773
+ ],
+ "blob-located (realistic)": [
+  0.9866155157715261,
+  0.9753826251232067,
+  0.9944839092988113
+ ]
+}

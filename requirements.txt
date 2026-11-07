@@ -7,3 +7,4 @@ pydicom
 scikit-learn
 matplotlib
 torch
+scikit-image

@@ -17,6 +17,8 @@ def to_unit(hu):
 
 
 class PatchDataset(Dataset):
+    folder = PATCH_DIR                    # where the .npy files are (step 4 reads tracks/ instead)
+
     def __init__(self, split, augment):
         index = pd.read_csv(PATCH_DIR / "index.csv")
         self.df = index[index["split"] == split].reset_index(drop=True)
@@ -27,7 +29,7 @@ class PatchDataset(Dataset):
 
     def __getitem__(self, i):
         row = self.df.iloc[i]
-        cube = torch.from_numpy(to_unit(np.load(PATCH_DIR / row.file)).astype(np.float32))
+        cube = torch.from_numpy(to_unit(np.load(self.folder / row.file)).astype(np.float32))
         slack = STORE - PATCH                                    # 8 voxels -> shifts of up to +-4 mm
 
         if self.augment:

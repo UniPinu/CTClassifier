@@ -48,9 +48,13 @@ def read_series(folder):
     if orientation != [1, 0, 0, 0, 1, 0]:   # we assume image left = patient right
         raise ValueError(f"unusual orientation {orientation}")
 
+    z = [float(s.ImagePositionPatient[2]) for s in slices]
+    gaps = np.diff(z)
+    if gaps.max() > 1.5 * np.median(gaps):  # idc-index only LOGS a failed file: a slice is missing
+        raise ValueError("missing slices")
+
     hu = [s.pixel_array * float(s.RescaleSlope) + float(s.RescaleIntercept) for s in slices]
     vol = np.clip(np.stack(hu), -1024, 3071).astype(np.int16)
-    z = [float(s.ImagePositionPatient[2]) for s in slices]
     info = {
         "spacing": (float(np.median(np.diff(z))),            # mm between slices
                     float(slices[0].PixelSpacing[0]),         # mm per pixel (rows)

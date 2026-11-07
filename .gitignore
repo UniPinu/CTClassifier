@@ -1,5 +1,6 @@
-# Data made by step 2 (tens of GB) and its temporary downloads
+# Data made by steps 2 and 4 (GBs) and their temporary downloads
 patches/
+tracks/
 tmp_dicom/
 
 # Python

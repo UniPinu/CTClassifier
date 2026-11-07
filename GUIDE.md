@@ -50,6 +50,10 @@ p5/
 ├── step3_model.py         dataset + network (imported by the two below)
 ├── step3_train.py
 ├── step3_gradcam.py
+├── step3_evaluate.py      CIs, breakdowns, find rate of the frozen model (3e)
+├── step3_experiments.py   clean learning-curve / epoch experiments (3f)
+├── step3_realistic.py     cancers located like benign nodules (3g)
+├── step4_*.py             Stage 2: see STAGE2.md
 ├── annotations.json       you download this (see below)
 │
 ├── cohort/                created by step 1
@@ -390,6 +394,46 @@ Centre score on 64 test cancers: 0.41 (0.05 = no focus on the centre)
 * **Centre score** = the share of the heat map inside the central 24³ mm, where the lesion is. Heat spread evenly would give (24/64)³ ≈ 0.05. Clearly above that means the model focuses on the lesion.
 * **`checks/gradcam.png`** shows 16 test cancers with the heat map on top. Look for heat **on the nodule**. Heat on the chest wall, the patch edges or empty lung means the model has found a shortcut, and that's worth a paragraph in the report even if the AUC looks good.
 
+#### Freeze the final model
+
+Every `step3_train.py` run overwrites `models/best.pt`. The model you report, and that Stage 2 builds on, is frozen as **`models/stage1_final.pt`** (`config.STAGE1_MODEL`). Ours is the final 120-epoch dashboard run, `dashboard/runs/20261102_183302/best.pt`, with its training curve in `models/stage1_final_log.csv`. `step3_train.py --test` and all scripts below use the frozen model.
+
+#### 3e. Evaluate the frozen model properly
+
+```bash
+python step3_evaluate.py           # validation split; --test ONCE at the very end
+```
+
+It prints every AUC with a **95% bootstrap CI** (2,000 resamples of whole *patients*: a patient's patches are not independent), **specificity at 90% sensitivity**, and two breakdowns of the cancers: **precursor vs newest** box and **solid vs subsolid** (centre above / below −400 HU, the blob finder's limit). It also gives the blob finder's **find rate** and the **mean of the last 10 epochs** (quote that, not the best epoch). Validation results of the frozen model:
+
+| | cancers | AUC [95% CI] | spec @ 90% sens |
+|---|---|---|---|
+| all patches | 180 | 0.962 [0.943, 0.979] | 0.91 |
+| cancer vs benign | 180 | 0.945 [0.920, 0.967] | 0.85 |
+| cancer vs random | 180 | 0.981 [0.967, 0.993] | 0.97 |
+| newest cancer vs benign | 102 | 0.966 [0.945, 0.983] | 0.90 |
+| precursor vs benign | 78 | 0.918 [0.867, 0.958] | 0.83 |
+| solid cancer vs benign | 99 | 0.967 [0.948, 0.982] | 0.89 |
+| subsolid cancer vs benign | 81 | 0.918 [0.867, 0.961] | 0.83 |
+
+Mean of the last 10 epochs: 0.952 (best epoch 0.962). Blob finder: a patch for 5,196 of 6,074 benign records (86%). Subsolid cancers are *harder*, not easier, so "subsolid = cancer" is not what drives the AUC. Precursors are harder too: that is the headroom for Stage 2. The hit rate still needs the eye check of step 2.
+
+#### 3f. Clean experiments
+
+```bash
+python step3_experiments.py        # ~6 h; resumable; --only learning | epochs | cosine
+```
+
+The dashboard history changed data size, epochs and the split together. These runs change **one** thing: a learning curve (25/50/75/100% of the training patients, 120 epochs, 2 seeds), epochs (40/80/120) and a cosine learning-rate schedule. Each run is saved in `models/runs/<name>/` (never `best.pt`) and becomes a row in `models/experiments.csv`. The same options exist on `step3_train.py`: `--epochs`, `--fraction`, `--seed`, `--cosine`, `--out`.
+
+#### 3g. Realistic evaluation
+
+```bash
+python step3_realistic.py          # ~110 downloads, ~10 min with 6 workers
+```
+
+Cancers come from hindsight boxes, benign nodules from the blob finder: did the model learn the difference? Here the val cancers are located **like the benign nodules**: the blob finder on NLST's own nodule records, with the boxes used only afterwards, to see which blob is the cancer. Result on our data: the blob finder located 46 of 180 boxed val lesions (it finds solid nodules, and many precursors have no record). On those 46, Stage 1 scores **0.987 [0.975, 0.994]** with blob-located cubes vs **0.985** with box-located cubes of the same lesions (AUC vs val benign). The location method is not what the model learned. Look at `checks/grid_realistic.png` to see that the blobs are nodules.
+
 ---
 
 ## What to write in the report
@@ -411,14 +455,17 @@ For code review, read in this order. Each file is short and does one thing.
 
 | File | Lines | What to look at |
 |---|---|---|
-| `config.py` | 31 | every setting |
+| `config.py` | 43 | every setting |
 | `step1_cohort.py` | 147 | `find_controls` (who counts as a control), `split_patients` |
-| `step2_patches.py` | 258 | `process_scan` (the per-scan recipe), then `cancer_centres` and `find_nodule` |
+| `step2_patches.py` | 262 | `process_scan` (the per-scan recipe), then `cancer_centres` and `find_nodule` |
 | `step2_check.py` | 75 | the density check |
-| `step3_model.py` | 74 | `__getitem__` (augmentation) and `PatchCNN` |
-| `step3_train.py` | 133 | `train_one_epoch` (4 lines), the best-model logic, `test` |
+| `step3_model.py` | 76 | `__getitem__` (augmentation) and `PatchCNN` |
+| `step3_train.py` | 172 | `train_one_epoch` (4 lines), the best-model logic, `test` |
 | `step3_gradcam.py` | 73 | `grad_cam` |
+| `step3_evaluate.py` | 155 | `bootstrap` (whole patients), `spec_at_sens`, the breakdowns in `main` |
+| `step3_experiments.py` | 57 | `GRID`: one change per run |
+| `step3_realistic.py` | 147 | `locate` (the blob finder on a cancer patient's records) |
 
 ### Next: stage 2 (the tracker)
 
-The trained `PatchCNN.encoder` turns any patch into 128 numbers. Stage 2 reuses it as a frozen encoder and runs a small GRU over the embeddings from T0 → T1 → T2 at the same spot. For that you need patches from the *other* screenings of each lesion, which means aligning scans across years (registration). That's the next guide.
+The trained `PatchCNN.encoder` turns any patch into 128 numbers. Stage 2 reuses it as a frozen encoder and runs a small GRU over the embeddings from T0 → T1 → T2 at the same spot. For that you need cubes from the *other* screenings of each lesion, which means aligning scans across years. See **`STAGE2.md`**.
