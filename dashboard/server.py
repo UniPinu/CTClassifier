@@ -13,7 +13,9 @@ command line on purpose: they are run once, at the very end.
 Run : python dashboard/server.py        then open http://localhost:8050  (Stage 2: /#stage2)
 """
 import json
+import os
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -33,6 +35,7 @@ from step4_check import read_tracks, summary  # noqa: E402
 from step4_sequences import make_jobs  # noqa: E402
 
 PORT = 8050
+WINDOWS = sys.platform == "win32"
 STEP2_WORKERS = 6     # scans downloaded and processed at the same time (step2_parallel.py)
 STEP4_WORKERS = 6     # patients processed at the same time (step4_sequences.py)
 TRACKER_PLAN = [      # CONTEXT.md 7.5, validation only: "Run the evaluation plan" queues these
@@ -64,7 +67,8 @@ class Job:
         self.started, self.label = time.time(), label
         self.proc = subprocess.Popen([sys.executable, "-u", *args], cwd=ROOT, text=True,
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                                     start_new_session=not WINDOWS)   # macOS/Linux: own group, for stop()
         threading.Thread(target=self._pump, args=(self.proc,), daemon=True).start()
 
     def queue(self, commands):
@@ -94,8 +98,14 @@ class Job:
 
     def stop(self):
         self.todo.clear()
-        if self.running():   # kill the whole tree: the venv launcher starts a second python
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True)
+        if self.running():   # kill the whole tree: the venv launcher starts a second python, plus workers
+            if WINDOWS:
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True)
+            else:
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             self.stopped = time.time()
 
 
@@ -181,11 +191,16 @@ def external(name):
     pattern, job = SCRIPTS[name]
     cache = _external[name]
     if time.time() - cache["t"] > 10:
-        ps = (f"Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -match '{pattern}' }}"
-              " | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId)\" }")
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.split()
-        pairs = list(zip(map(int, out[::2]), map(int, out[1::2])))
+        if WINDOWS:
+            ps = (f"Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -match '{pattern}' }}"
+                  " | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId)\" }")
+            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.split()
+            pairs = list(zip(map(int, out[::2]), map(int, out[1::2])))
+        else:   # macOS / Linux: every process as "pid ppid command line"
+            out = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+            rows = [line.split(None, 2) for line in out.splitlines()]
+            pairs = sorted((int(r[0]), int(r[1])) for r in rows if len(r) == 3 and re.search(pattern, r[2]))
         ours = {job.proc.pid} if job.running() else set()
         for pid, parent in pairs:                     # our launcher, its python, and their workers
             if parent in ours:
@@ -354,6 +369,8 @@ def scheduler():
         time.sleep(30)
         if evaluation.running() or not (PATCH_DIR / "index.csv").exists():
             continue
+        if next(PATCH_DIR.glob("*.npy"), None) is None:   # results-only copy (e.g. a git clone): nothing to train on
+            continue
         done, h = scans_done(), history()
         last = h[-1]["scans_done"] if h else None
         final = done >= TOTAL and (last is None or last < done)
@@ -413,7 +430,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class Server(ThreadingHTTPServer):
-    allow_reuse_address = False      # on Windows, reuse lets a second dashboard share the port
+    # On Windows, reuse lets a second dashboard share the port. On macOS/Linux it only lets a restarted
+    # dashboard take the port back straight away (a second one still gets "port in use").
+    allow_reuse_address = not WINDOWS
 
     def server_bind(self):
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):

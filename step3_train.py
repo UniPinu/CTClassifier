@@ -29,9 +29,9 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
 from config import BATCH_SIZE, CHECK_DIR, EPOCHS, LEARNING_RATE, MODEL_DIR, SEED, STAGE1_MODEL
-from step3_model import PatchCNN, PatchDataset
+from step3_model import PatchCNN, PatchDataset, pick_device
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = pick_device()
 
 
 @torch.no_grad()

@@ -32,7 +32,7 @@ from step1_cohort import load_clinical
 from step2_check import save_grid
 from step2_patches import LOBE_SIDE, find_nodule
 from step3_evaluate import auc_ci, load_stage1, score_patches
-from step3_model import PatchDataset, to_unit
+from step3_model import PatchDataset, pick_device, to_unit
 from step4_sequences import cut, load_scan, start_worker   # download with retry, same crop
 
 OUT = PATCH_DIR / "realistic"
@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--workers", type=int, default=6)
     args = parser.parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = pick_device()
 
     _, ctab = load_clinical(IDCClient())
     patients = pd.read_csv(COHORT_DIR / "patients.csv")

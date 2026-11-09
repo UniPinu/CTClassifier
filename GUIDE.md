@@ -77,6 +77,22 @@ For the GPU, install PyTorch using the selector on pytorch.org, choosing the CUD
 python -c "import torch; print(torch.cuda.is_available())"     # must print True on the school PC
 ```
 
+**On a Mac** (Apple silicon, M1 or later) the plain `pip install -r requirements.txt` is enough: PyTorch then uses the Apple GPU (`mps`). The scripts pick the device themselves (`pick_device()` in `step3_model.py`: cuda, then mps, then cpu), and fall back to the CPU if your PyTorch can't run the 3D layers on `mps`. Force one with e.g. `DEVICE=cpu python step3_train.py`. Check with:
+
+```bash
+python -c "from step3_model import pick_device; print(pick_device())"   # mps on a MacBook
+```
+
+### What is in git, and what isn't
+
+The repository holds the code and every **result**: the cohort, the trained models (`models/`, `dashboard/runs/`), the check images (`checks/`), and the small index CSVs of steps 2 and 4 (`patches/index.csv`, `tracks/tracks.csv`, ...). The **training data** is not in git: the image cubes in `patches/*.npy` and `tracks/*.npy` and `tracks/embeddings.npz` (about 15 GB). So a fresh clone can show all results straight away:
+
+```bash
+python dashboard/server.py        # then open http://localhost:8050
+```
+
+To retrain or re-evaluate (`step3_train.py`, `step3_evaluate.py`, `step4_embed.py`, ...) you need the cubes. Either copy the `patches/` and `tracks/` folders over from the PC (easiest), or rebuild them with `python step2_patches.py` and then `python step4_sequences.py`. Those download from IDC (one or two nights, then 4–5 hours), skip everything listed in `done.txt` and *append* to their CSVs, so first delete the committed `done.txt`, `index.csv`, `failures.csv` (in `patches/`) and `done.txt`, `tracks.csv`, `failures.csv` (in `tracks/`). `step4_tracker.py` reads `tracks/embeddings.npz`, which `python step4_embed.py` makes from the cubes.
+
 ### Get the radiologist boxes
 
 The Sybil README (github.com/reginabarzilaygroup/Sybil), under **Annotations**, links to a JSON file on Google Drive. Save it as `annotations.json` in the project folder. Its format:

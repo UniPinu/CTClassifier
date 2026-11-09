@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 
 from config import (CHECK_DIR, COHORT_DIR, MODEL_DIR, N_BOOTSTRAP, PATCH_DIR, SEED, STAGE1_MODEL,
                     STORE)
-from step3_model import PatchCNN, PatchDataset
+from step3_model import PatchCNN, PatchDataset, pick_device
 
 MID = STORE // 2
 
@@ -101,7 +101,7 @@ def main():
     parser.add_argument("--test", action="store_true")
     args = parser.parse_args()
     split = "test" if args.test else "val"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = pick_device()
 
     ds = PatchDataset(split, augment=False)
     df = ds.df.assign(score=score_patches(load_stage1(device), ds, device))

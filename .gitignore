@@ -1,9 +1,19 @@
-# Data made by steps 2 and 4 (GBs) and their temporary downloads
-patches/
-tracks/
+# Training data made by steps 2 and 4 (GBs): the image cubes and the embeddings are ignored,
+# their small index / progress CSVs are kept so the dashboard can show the results.
+patches/*
+!patches/index.csv
+!patches/done.txt
+!patches/failures.csv
+tracks/*
+!tracks/tracks.csv
+!tracks/done.txt
+!tracks/failures.csv
 tmp_dicom/
 
 # Python
 .venv/
 __pycache__/
 *.pyc
+
+# macOS
+.DS_Store

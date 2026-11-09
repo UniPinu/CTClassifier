@@ -2,6 +2,9 @@
 Step 3 - The dataset (patches -> tensors, with augmentation) and the 3D CNN.
 Imported by step3_train.py and step3_gradcam.py.
 """
+import functools
+import os
+
 import numpy as np
 import pandas as pd
 import torch
@@ -74,3 +77,21 @@ class PatchCNN(nn.Module):
 
     def forward(self, x):                 # x: (batch, 1, 64, 64, 64)
         return self.head(self.encoder(x))  # (batch, 1) logits: > 0 means "cancer"
+
+
+@functools.cache
+def pick_device():
+    """NVIDIA GPU (cuda) > Apple GPU (mps, MacBooks with M chips) > cpu.
+    Force one with the environment variable DEVICE, e.g.  DEVICE=cpu python step3_train.py"""
+    if os.environ.get("DEVICE"):
+        return os.environ["DEVICE"]
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        try:   # older PyTorch versions lack some 3D layers on mps: try one tiny training step
+            model = PatchCNN().to("mps")
+            model(torch.zeros(2, 1, PATCH, PATCH, PATCH, device="mps")).sum().backward()
+            return "mps"
+        except (RuntimeError, NotImplementedError) as e:
+            print(f"Apple GPU (mps) can't run the 3D CNN with this PyTorch ({type(e).__name__}), using the CPU")
+    return "cpu"
